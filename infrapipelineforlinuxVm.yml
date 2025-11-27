@@ -1,0 +1,73 @@
+trigger:
+  branches:
+    include:
+    - none
+pool:
+  vmImage: ubuntu-latest
+stages:
+- stage: deployinfra_andScan
+  jobs:
+  - job: scanning_code
+    steps:
+    - task: 6d15af64-176c-496d-b583-fd2ae21d4df4@1
+      inputs:
+        repository: self
+    - task: TerraformInstaller@1
+      inputs:
+        terraformVersion: 'latest'
+    - task: tfsec@1
+      inputs:
+        version: 'v1.26.0'
+        dir: 'linux_vm_keyvault'
+    - task: TerraformTask@5
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/linux_vm_keyvault/root_module'
+        backendServiceArm: 'new_connection_resource'
+        backendAzureRmResourceGroupName: 'hp-rg'
+        backendAzureRmStorageAccountName: 'mystorage56798'
+        backendAzureRmContainerName: 'storage378'
+        backendAzureRmKey: 'dev.terraform.tfstate'
+    - task: TerraformTask@5
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/linux_vm_keyvault/root_module'
+        environmentServiceNameAzureRM: 'new_connection_resource'
+- stage: ApplyTerraform
+  displayName: "Apply Terraform After Approval"
+  dependsOn:
+  - deployinfra_andScan
+  jobs:
+  - deployment: deployvm
+    displayName: "Deploy VM"
+    environment:
+      name: linux_vm_creation
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: 6d15af64-176c-496d-b583-fd2ae21d4df4@1
+            inputs:
+              repository: self
+          - task: TerraformInstaller@1
+            inputs:
+              terraformVersion: 'latest'
+          - task: TerraformTask@5
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/linux_vm_keyvault/root_module'
+              backendServiceArm: 'new_connection_resource'
+              backendAzureRmResourceGroupName: 'hp-rg'
+              backendAzureRmStorageAccountName: 'mystorage56798'
+              backendAzureRmContainerName: 'storage378'
+              backendAzureRmKey: 'dev.terraform.tfstate'
+          - task: TerraformTask@5
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              environmentServiceNameAzureRM: 'new_connection_resource'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/linux_vm_keyvault/root_module'
+
